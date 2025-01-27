@@ -1,6 +1,6 @@
 import sys
 import os
-from typing import List
+from typing import List, Any
 from dataclasses import dataclass
 
 
@@ -11,13 +11,13 @@ class Command():
     arguments: List[str] = None
 
     def __str__(self) -> str:
-        com = f"Command: {self.program}"
+        com = f"{self.program}"
 
         if self.flags:
             com += " Flags: " + " ".join(self.flags)
         
         if self.arguments:
-            com += " Arguments " + " ".join(self.arguments)
+            com += " Arguments: " + " ".join(self.arguments)
         
         return com
 
@@ -140,6 +140,13 @@ class Redirect():
     left: Command
     right: Command
     def __str__(self) -> str:
+        return f"Redirect from {self.left} > {self.right}"
+
+@dataclass
+class Append():
+    left: Command
+    right: Command
+    def __str__(self) -> str:
         return f"Redirect from {self.left} >> {self.right}"
 
 @dataclass
@@ -155,3 +162,177 @@ class Sequence():
     def __str__(self) -> str:
         return f"Sequence {self.left};{self.right}"
     
+type Binding[V] = tuple[str,V]
+type Env[V] = tuple[Binding[V],...]
+emptyEnv : Env[Any] = ()
+
+def extendEnv[V](name: str, value: V, env:Env[V]) -> Env[V]:
+    return ((name,value),) + env
+
+def lookupEnv[V](name: str, env: Env[V]) -> (V | None) :
+    match env:
+        case ((n,v), *rest) :
+            if n == name:
+                return v
+            else:
+                return lookupEnv(name, rest) # type:ignore
+        case _ :
+            return None  
+
+class EvalError(Exception):
+    pass
+
+type Value = int | bool | Command
+
+def evalInEnv(env: Env[Value], e:Expr) -> Value:
+    match e:
+        case Add(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)):
+                    return lv + rv
+                case _:
+                    raise EvalError("addition of non-integers")
+        case Sub(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)):
+                    return lv - rv
+                case _:
+                    raise EvalError("subtraction of non-integers")
+        case Mul(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)):
+                    return lv * rv
+                case _:
+                    raise EvalError("multiplication of non-integers")
+        case Lt(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case(int(lv), int(rv)):
+                    if(lv < rv):
+                        return True
+                    elif(lv > rv):
+                        return False
+                case _:
+                    raise EvalError("Less than comparison of non-integers")
+        case And(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case((bool(lv), bool(rv))):
+                    if(lv and rv):
+                        return True
+                    else:
+                        return False
+                case _: 
+                    raise EvalError("One of the operands is not a bool!")
+        
+        case Or(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case((bool(lv), bool(rv))):
+                    if(lv or rv):
+                        return True
+                    else:
+                        return False
+                case _: 
+                    raise EvalError("One of the operands is not a bool!")
+
+        case Not(s):
+            return Not(evalInEnv(env,s))
+        case Eq(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case((bool(lv), bool(rv))):
+                    if lv == rv:
+                        return True
+                    else:
+                        return False
+                case((int(lv), int(rv))):
+                    if lv == rv:
+                        return True
+                    else:
+                        return False
+                case((Command(lv), Command(rv))):
+                    if lv == rv:
+                        return ("The strings are equal!")
+                    else:
+                        return ("The strings are not the same!")
+                case _:
+                    raise EvalError("Type is not bool, nor int, nor command!")
+
+
+        case Div(l,r):
+            match (evalInEnv(env,l), evalInEnv(env,r)):
+                case (int(lv), int(rv)):
+                    if rv == 0:
+                        raise EvalError("division by zero")
+                    return lv // rv
+                case _:
+                    raise EvalError("division of non-integers")
+        case If(b,t,e):
+            match(evalInEnv(env,b)):
+                case bool(bv):
+                    if bv:
+                        return evalInEnv(env,t)
+                    elif (bv == False):
+                        return evalInEnv(env,e)
+                case _:
+                    raise EvalError("First operand in If statement is not a bool!")
+        
+
+        case Neg(s):
+            match evalInEnv(env,s):
+                case int(i):
+                    return -i
+                case _:
+                    raise EvalError("negation of non-integer")
+        case(Lit(lit)):
+            match lit:  # two-level matching keeps type-checker happy
+                case int(i):
+                    return i
+                case bool(b):
+                    return b
+                case Command(c):
+                    return str(c)
+                case _:
+                    raise EvalError(f"Unsupported literal type: {lit}")
+        case Name(n):
+            v = lookupEnv(n, env)
+            if v is None:
+                raise EvalError(f"unbound name {n}")
+            return v
+        case Let(n,d,b):
+            v = evalInEnv(env, d)
+            newEnv = extendEnv(n, v, env)
+            return evalInEnv(newEnv, b)
+        case Command(line,flags,arguments):
+            final_str = line
+            
+            if flags:
+                for flag in flags:
+                    final_str += " " + flag
+
+            if arguments:
+                for argument in arguments:
+                    final_str += " " + argument
+            
+            return final_str
+        case Pipe(lc,rc):
+            return str(evalInEnv(env, lc)) + ' | ' + str(evalInEnv(env,rc))
+        case Redirect(lc,rc):
+            return str(evalInEnv(env,lc)) + ' > ' + str(evalInEnv(env,rc))
+        case Append(lc,rc):
+            return str(evalInEnv(env,lc)) + ' >> ' + str(evalInEnv(env,rc))
+        case Bg(c):
+            return str(evalInEnv(env,c)) + ' &'
+        case Sequence(lc,rc):
+            return str(evalInEnv(env,lc)) + ' ; ' + str(evalInEnv(env,rc))
+        
+# Create the Command objects for the test case
+ls_command = Command(program="ls", flags=["-l"], arguments=[])
+grep_command = Command(program="grep", flags=[], arguments=["file"])
+a : Expr = Let('x', Add(Lit(1), Lit(2)), 
+                    Sub(Name('x'), Lit(3)))
+# Create the Pipe object to represent the "ls -l | grep file" command
+pipe_command = Pipe(left=ls_command, right=grep_command)
+
+# Print the AST representation
+print(pipe_command)
+print(a)
+print(evalInEnv(emptyEnv, pipe_command))
+print(evalInEnv(emptyEnv, a))
