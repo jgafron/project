@@ -13,10 +13,10 @@ class Command():
         com = f"{self.program}"
 
         if self.flags:
-            com += " Flags: " + " ".join(self.flags)
+            com += " " + " ".join(self.flags)
         
         if self.arguments:
-            com += " Arguments: " + " ".join(self.arguments)
+            com += " " + " ".join(self.arguments)
         
         return com
 
@@ -479,6 +479,7 @@ def execute_command(cmd: str) -> str:
         return f"An unexpected error occurred: {str(e)}"
 
 a = RedirectOut(Pipe(Command('ls', '-l'), Command('grep', 'txt')), Filename('testoutput.txt'))
-b = Command('ls', '-l')
+b = Command('ls', ['-l'])
+print(b)
 execute_command(str(a))
 execute_command(str(b))
