@@ -342,11 +342,11 @@ pipe_command = Pipe(left=ls_command, right=grep_command)
 def execute_command(cmd: str) -> str:
     return_string = subprocess.run(cmd, shell=True, capture_output=True)
     if (return_string.stderr):
-        return return_string.stderr
+        print(return_string.stderr)
     elif(return_string.stdout):
-        return return_string.stdout
+        print(return_string.stdout)
     else:
-        return return_string.returncode
+        print(return_string.returncode)
 
 # Print the AST representation
 print(pipe_command)
