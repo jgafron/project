@@ -1,9 +1,12 @@
 import sys
 import os
-from typing import List, Any, Union, Tuple
+from typing import List, Any, Union, Tuple, TypeVar
 from dataclasses import dataclass
 import subprocess
 
+
+# Define a type variable for generics
+V = TypeVar('V')
 
 @dataclass
 class Command:
@@ -171,10 +174,11 @@ Binding = Tuple[str, Any]
 Env = Tuple[Binding, ...]
 emptyEnv: Env = ()
 
-def extendEnv[V](name: str, value: V, env: Env[V]) -> Env[V]:
+# Use `TypeVar` to define generics in functions
+def extendEnv(name: str, value: V, env: Env[V]) -> Env[V]:
     return ((name, value),) + env
 
-def lookupEnv[V](name: str, env: Env[V]) -> Union[V, None]:
+def lookupEnv(name: str, env: Env[V]) -> Union[V, None]:
     match env:
         case ((n, v), *rest):
             if n == name:
