@@ -146,7 +146,7 @@ class RedirectIn():
     left: Command
     right: Command
     def __str__(self) -> str:
-        return f"Redirect from {self.left} < {self.right}"
+        return f"Redirect to {self.left} < from {self.right}"
     
     
 @dataclass
@@ -480,7 +480,7 @@ def execute_command(cmd: str) -> str:
 
 a = RedirectOut(Pipe(Command('ls', ['-l']), Command('grep', ['txt'])), Filename('testoutput.txt'))
 b = Command('ls', ['-l'])
-print(b)
-print(a)
-execute_command(str(a))
-execute_command(str(b))
+command_stra = eval(a)
+command_strb = eval(b)
+execute_command(command_stra)
+execute_command(command_strb)
