@@ -4,7 +4,6 @@ from typing import List, Any, Union, Tuple, TypeVar
 from dataclasses import dataclass
 import subprocess
 
-
 # Define a type variable for generics
 V = TypeVar('V')
 
@@ -169,7 +168,7 @@ class Sequence:
         return f"Sequence {self.left};{self.right}"
 
 # Use Union for the binding type
-Binding = Tuple[str, Any]
+Binding = Tuple[str, Value]
 # Define Env as a tuple of Bindings
 Env = Tuple[Binding, ...]
 emptyEnv: Env = ()
