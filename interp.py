@@ -185,59 +185,85 @@ class EvalError(Exception):
 
 type Value = int | bool | Command
 
-def eval(env: Env[Value], e:Expr) -> Value:
+def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
     match e:
-        case Add(l,r):
-            match (eval(env,l), eval(env,r)):
+        case Add(l, r):
+            lv, rv = eval(l, env), eval(r, env)
+            
+            if isinstance(lv, bool) or isinstance(rv, bool):
+                raise EvalError("One of the operands is a bool")
+            match (lv, rv):
                 case (int(lv), int(rv)):
                     return lv + rv
                 case _:
                     raise EvalError("addition of non-integers")
+                
         case Sub(l,r):
-            match (eval(env,l), eval(env,r)):
+            match (eval(l, env), eval(r, env)):
                 case (int(lv), int(rv)):
                     return lv - rv
                 case _:
                     raise EvalError("subtraction of non-integers")
-        case Mul(l,r):
-            match (eval(env,l), eval(env,r)):
-                case (int(lv), int(rv)):
-                    return lv * rv
-                case _:
-                    raise EvalError("multiplication of non-integers")
+        case Mul(l, r):
+            lv = eval(l,env)
+            rv = eval(r,env)
+
+            if (type(lv) != type(rv)):
+                raise EvalError("Less than operation on two variables that arent the same type@!")
+            else:
+                return (lv*rv)
+
         case Lt(l,r):
-            match (eval(env,l), eval(env,r)):
-                case(int(lv), int(rv)):
-                    if(lv < rv):
-                        return True
-                    elif(lv > rv):
-                        return False
-                case _:
-                    raise EvalError("Less than comparison of non-integers")
-        case And(l,r):
-            match (eval(env,l), eval(env,r)):
-                case((bool(lv), bool(rv))):
-                    if(lv and rv):
-                        return True
-                    else:
-                        return False
-                case _: 
-                    raise EvalError("One of the operands is not a bool!")
+            lv = eval(l,env)
+            rv = eval(r,env)
+            
+            if (type(lv) != type(rv)):
+                raise EvalError("Less than operation on two variables that arent the same type@!")
+            
+            if(lv < rv):
+                return True
+            elif(lv > rv):
+                return False
+            elif(lv == rv):
+                return False
+                
+        case And(l, r):
+            lv = eval(l, env)
+            if isinstance(lv, bool):
+                if not lv:  # short-circuit
+                    return False
+            else:
+                raise EvalError("Left operand is not a bool")
+    
+            rv = eval(r, env)
+            if isinstance(rv, bool):
+                return lv and rv
+            else:
+                raise EvalError("Right operand is not a bool!")
         
-        case Or(l,r):
-            match (eval(env,l), eval(env,r)):
-                case((bool(lv), bool(rv))):
-                    if(lv or rv):
-                        return True
-                    else:
-                        return False
-                case _: 
-                    raise EvalError("One of the operands is not a bool!")
+        case Or(l, r):
+            lv = eval(l, env)
+            rv = eval(r, env)
+    
+            if isinstance(lv, bool) and isinstance(rv, bool):
+                return lv or rv
+            else:
+                raise EvalError("One of the operands is not a bool!")
 
         case Not(s):
-            return Not(eval(env,s))
+            val = eval(s, env)
+            if isinstance(val, bool):
+                return not val  # Negate the boolean value
+            else:
+                raise EvalError("Not expects a boolean")
         case Eq(l,r):
-            match (eval(env,l), eval(env,r)):
+            lv = eval(l, env)
+            rv = eval(r, env)
+
+            if (type(rv) != type(lv)):
+                raise EvalError("Equality operation on two types that are not the same!")
+                
+            match (eval(l, env), eval(r, env)):
                 case((bool(lv), bool(rv))):
                     if lv == rv:
                         return True
@@ -258,31 +284,37 @@ def eval(env: Env[Value], e:Expr) -> Value:
 
 
         case Div(l,r):
-            match (eval(env,l), eval(env,r)):
-                case (int(lv), int(rv)):
-                    if rv == 0:
-                        raise EvalError("division by zero")
-                    return lv // rv
-                case _:
-                    raise EvalError("division of non-integers")
+            lv = eval(l,env)
+            rv = eval(r,env)
+            
+            if isinstance(lv, bool) or isinstance(rv, bool):
+                raise EvalError("One of the operands is a bool")
+            
+            if isinstance(lv, int) and (rv == 0):
+                raise EvalError("Division by zero!")
+            
+            else:
+                return lv // rv
+                
         case If(b,t,e):
-            match(eval(env,b)):
+            match(eval(b, env)):
                 case bool(bv):
                     if bv:
-                        return eval(env,t)
+                        return eval(t, env)
                     elif (bv == False):
-                        return eval(env,e)
+                        return eval(e, env)
                 case _:
                     raise EvalError("First operand in If statement is not a bool!")
         
 
+
         case Neg(s):
-            match eval(env,s):
-                case int(i):
-                    return -i
-                case _:
-                    raise EvalError("negation of non-integer")
-        case(Lit(lit)):
+            if eval(s,env) is not int:
+                raise EvalError("negation of non-integer")
+            else:
+                return -s
+            
+        case Lit(lit):
             match lit:  # two-level matching keeps type-checker happy
                 case int(i):
                     return i
@@ -298,9 +330,9 @@ def eval(env: Env[Value], e:Expr) -> Value:
                 raise EvalError(f"unbound name {n}")
             return v
         case Let(n,d,b):
-            v = eval(env, d)
+            v = eval(d, env)
             newEnv = extendEnv(n, v, env)
-            return eval(newEnv, b)
+            return eval(b, newEnv)
         case Command(line,flags,arguments):
             final_str = line
             
@@ -314,16 +346,16 @@ def eval(env: Env[Value], e:Expr) -> Value:
             
             return final_str
         case Pipe(lc,rc):
-            return str(eval(env, lc)) + ' | ' + str(eval(env,rc))
+            return str(eval(lc, env)) + ' | ' + str(eval(rc, env))
         case Redirect(lc,rc):
-            return str(eval(env,lc)) + ' > ' + str(eval(env,rc))
+            return str(eval(lc, env)) + ' > ' + str(eval(rc, env))
         case Append(lc,rc):
-            return str(eval(env,lc)) + ' >> ' + str(eval(env,rc))
+            return str(eval(lc, env)) + ' >> ' + str(eval(rc, env))
         case Bg(c):
-            return str(eval(env,c)) + ' &'
+            return str(eval(c, env)) + ' &'
         case Sequence(lc,rc):
-            return str(eval(env,lc)) + ' ; ' + str(eval(env,rc))
-    
+            return str(eval(lc, env)) + ' ; ' + str(eval(rc, env))
+
 def execute_command(cmd : str) -> str:
     try:
         subprocess.run(cmd, shell=True, )
@@ -332,12 +364,9 @@ def execute_command(cmd : str) -> str:
     except:
         raise EvalError()
 # Create the Command objects for the test case
-ls_command = Command(program="ls", flags=["-l"], arguments=[])
-grep_command = Command(program="grep", flags=[], arguments=["file"])
-a : Expr = Let('x', Add(Lit(1), Lit(2)), 
-                    Sub(Name('x'), Lit(3)))
+
+b: Expr = Add(Lit(False), Lit(-69)) #TEST
 # Create the Pipe object to represent the "ls -l | grep file" command
-pipe_command = Pipe(left=ls_command, right=grep_command)
 
 def execute_command(cmd: str) -> str:
     return_string = subprocess.run(cmd, shell=True, capture_output=True)
@@ -347,10 +376,3 @@ def execute_command(cmd: str) -> str:
         print(return_string.stdout)
     else:
         print(return_string.returncode)
-
-# Print the AST representation
-print(pipe_command)
-print(a)
-test_string = eval(emptyEnv, pipe_command)
-execute_command(test_string)
-print(eval(emptyEnv, a))
