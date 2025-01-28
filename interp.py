@@ -479,4 +479,6 @@ def execute_command(cmd: str) -> str:
         return f"An unexpected error occurred: {str(e)}"
 
 a = RedirectOut(Pipe(Command('ls', '-l'), Command('grep', 'txt')), Filename('testoutput.txt'))
+b = Command('ls', '-l')
 execute_command(str(a))
+execute_command(str(b))
