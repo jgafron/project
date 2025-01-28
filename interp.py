@@ -2,6 +2,7 @@ import sys
 import os
 from typing import List, Any
 from dataclasses import dataclass
+import subprocess
 
 
 @dataclass
@@ -322,7 +323,14 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
             return str(evalInEnv(env,c)) + ' &'
         case Sequence(lc,rc):
             return str(evalInEnv(env,lc)) + ' ; ' + str(evalInEnv(env,rc))
-        
+    
+def execute_command(cmd : str) -> str:
+    try:
+        subprocess.run(cmd, shell=True, )
+        return resulting_string
+
+    except:
+        raise EvalError()
 # Create the Command objects for the test case
 ls_command = Command(program="ls", flags=["-l"], arguments=[])
 grep_command = Command(program="grep", flags=[], arguments=["file"])
@@ -331,8 +339,18 @@ a : Expr = Let('x', Add(Lit(1), Lit(2)),
 # Create the Pipe object to represent the "ls -l | grep file" command
 pipe_command = Pipe(left=ls_command, right=grep_command)
 
+def execute_command(cmd: str) -> str:
+    return_string = subprocess.run(cmd, shell=True, capture_output=True)
+    if (return_string.stderr):
+        return return_string.stderr
+    elif(return_string.stdout):
+        return return_string.stdout
+    else:
+        return return_string.returncode
+
 # Print the AST representation
 print(pipe_command)
 print(a)
-print(evalInEnv(emptyEnv, pipe_command))
+test_string = evalInEnv(emptyEnv, pipe_command)
+execute_command(test_string)
 print(evalInEnv(emptyEnv, a))
