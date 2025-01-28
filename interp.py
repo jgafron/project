@@ -1,5 +1,3 @@
-import sys
-import os
 from typing import List, Any
 from dataclasses import dataclass
 import subprocess
@@ -31,7 +29,7 @@ class Filename():
     
 
 type Literal = int | Command | Filename
-type Expr = Add | Sub | Mul | Div | Neg | Lit | And | Or | Not | Name | Eq | Lt | If | Pipe | Redirect | Bg
+type Expr = Add | Sub | Mul | Div | Neg | Lit | And | Or | Not | Name | Eq | Lt | If | Pipe | RedirectOut | RedirectIn  | RedirectErrorIn | Bg 
 
 @dataclass
 class Add():
@@ -137,11 +135,33 @@ class Pipe():
         return f"Command: {self.left} | Command: {self.right}"
     
 @dataclass
-class Redirect():
+class RedirectOut():
     left: Command
     right: Command
     def __str__(self) -> str:
         return f"Redirect from {self.left} > {self.right}"
+    
+@dataclass
+class RedirectIn():
+    left: Command
+    right: Command
+    def __str__(self) -> str:
+        return f"Redirect from {self.left} < {self.right}"
+    
+    
+@dataclass
+class RedirectErrorOut():
+    left: Command
+    right: Filename
+    def __str__(self) -> str:
+        return f"Redirect stderr from {self.left} 2> {self.right}"
+
+@dataclass
+class RedirectErrorIn():
+    left: Command
+    right: Filename
+    def __str__(self) -> str:
+        return f"Redirect stderr from {self.left} 2< {self.right}"
 
 @dataclass
 class Append():
@@ -199,11 +219,14 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                     raise EvalError("addition of non-integers")
                 
         case Sub(l,r):
-            match (eval(l, env), eval(r, env)):
-                case (int(lv), int(rv)):
-                    return lv - rv
-                case _:
-                    raise EvalError("subtraction of non-integers")
+            lv = eval(l,env)
+            rv = eval(r,env)
+
+            if (type(lv) != int) or (type(rv) != int):
+                raise EvalError("subtraction of non integers!")
+            else:
+                return lv - rv
+
         case Mul(l, r):
             lv = eval(l,env)
             rv = eval(r,env)
@@ -243,9 +266,12 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
         
         case Or(l, r):
             lv = eval(l, env)
-            
             if isinstance(lv, bool) and lv:
                 return True
+            
+            if (type(lv) != bool):
+                raise EvalError("LHS isnt bool!")
+            
             rv = eval(r, env)
     
             if isinstance(rv, bool):
@@ -264,7 +290,7 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             rv = eval(r, env)
 
             if (type(rv) != type(lv)):
-                raise EvalError("Equality operation on two types that are not the same!")
+                return False
                 
             match (eval(l, env), eval(r, env)):
                 case((bool(lv), bool(rv))):
@@ -347,34 +373,110 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                     final_str += " " + argument
             
             return final_str
+        
+        case Filename(s):
+            return str('"' + s + '"')
+        
         case Pipe(lc,rc):
-            return str(eval(lc, env)) + ' | ' + str(eval(rc, env))
-        case Redirect(lc,rc):
-            return str(eval(lc, env)) + ' > ' + str(eval(rc, env))
+            lcp = eval(lc,env)
+            rcp = eval(rc,env)
+
+            if(type(lcp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            elif(type(rcp) != Command):
+               raise EvalError("Right command isnt a command!")
+            
+            else:
+                return str(lcp + ' | ' + rcp)
+            
+        case RedirectOut(lc,rc):
+            lcp = eval(lc,env)
+            rcp = eval(rc,env)
+
+            if(type(lcp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            elif(type(rcp) != Filename):
+               raise EvalError("Right side of redirect stdout isnt a filename!")
+            
+            else:
+                return str(lcp + ' > ' + rcp)
+            
+        case RedirectIn(lc,rc):
+            lcp = eval(lc,env)
+            rcp = eval(rc,env)
+
+            if(type(lcp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            elif(type(rcp) != Filename):
+               raise EvalError("Right side of redirect stdin isnt a filename!")
+            
+            else:
+                return str(lcp + ' < ' + rcp)
+            
+        case RedirectErrorOut(lc,rc):
+            lcp = eval(lc,env)
+            rcp = eval(rc,env)
+
+            if(type(lcp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            elif(type(rcp) != Filename):
+               raise EvalError("Right side of redirect stderr isnt a filename!")
+            
+            else:
+                return str(lcp + ' 2> ' + rcp)
+            
+            
         case Append(lc,rc):
-            return str(eval(lc, env)) + ' >> ' + str(eval(rc, env))
+            lcp = eval(lc,env)
+            rcp = eval(rc,env)
+
+            if(type(lcp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            elif(type(rcp) != Filename):
+               raise EvalError("Right side of append isnt a filename!")
+            
+            else:
+                return str(lcp + ' >> ' + rcp)
+            
         case Bg(c):
-            return str(eval(c, env)) + ' &'
+            cp = eval(c,env)
+
+            if(type(cp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            else:
+                return str(cp + ' & ')
+        
         case Sequence(lc,rc):
-            return str(eval(lc, env)) + ' ; ' + str(eval(rc, env))
+            lcp = eval(lc,env)
+            rcp = eval(rc,env)
 
-def execute_command(cmd : str) -> str:
-    try:
-        subprocess.run(cmd, shell=True, )
-        return resulting_string
-
-    except:
-        raise EvalError()
-# Create the Command objects for the test case
-
-b: Expr = Add(Lit(False), Lit(-69)) #TEST
-# Create the Pipe object to represent the "ls -l | grep file" command
+            if(type(lcp) != Command):
+               raise EvalError("Left command isnt a command!")
+            
+            elif(type(rcp) != Command):
+               raise EvalError("Right side of sequence isnt a command!")
+            
+            else:
+                return str(lcp + ' ; ' + rcp)
 
 def execute_command(cmd: str) -> str:
-    return_string = subprocess.run(cmd, shell=True, capture_output=True)
-    if (return_string.stderr):
-        print(return_string.stderr)
-    elif(return_string.stdout):
-        print(return_string.stdout)
-    else:
-        print(return_string.returncode)
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+        if result.stdout:
+            return result.stdout
+        else:
+            return "No output from command"
+
+    except subprocess.CalledProcessError as e:
+        return f"Command failed with error: {e.stderr}"
+    except Exception as e:
+        return f"An unexpected error occurred: {str(e)}"
+
+a = RedirectOut(Pipe(Command('ls', '-l'), Command('grep', 'txt')), Filename('testoutput.txt'))
+execute_command(str(a))
