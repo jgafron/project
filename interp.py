@@ -243,9 +243,12 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
         
         case Or(l, r):
             lv = eval(l, env)
+            
+            if isinstance(lv, bool) and lv:
+                return True
             rv = eval(r, env)
     
-            if isinstance(lv, bool) and isinstance(rv, bool):
+            if isinstance(rv, bool):
                 return lv or rv
             else:
                 raise EvalError("One of the operands is not a bool!")
@@ -305,15 +308,14 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                         return eval(e, env)
                 case _:
                     raise EvalError("First operand in If statement is not a bool!")
-        
-
 
         case Neg(s):
-            if eval(s,env) is not int:
-                raise EvalError("negation of non-integer")
+            val = eval(s, env)
+            if (type(val)) is not int:
+                raise EvalError
             else:
-                return -s
-            
+                return (-1 * val)
+
         case Lit(lit):
             match lit:  # two-level matching keeps type-checker happy
                 case int(i):
