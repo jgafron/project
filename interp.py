@@ -185,28 +185,28 @@ class EvalError(Exception):
 
 type Value = int | bool | Command
 
-def evalInEnv(env: Env[Value], e:Expr) -> Value:
+def eval(env: Env[Value], e:Expr) -> Value:
     match e:
         case Add(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case (int(lv), int(rv)):
                     return lv + rv
                 case _:
                     raise EvalError("addition of non-integers")
         case Sub(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case (int(lv), int(rv)):
                     return lv - rv
                 case _:
                     raise EvalError("subtraction of non-integers")
         case Mul(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case (int(lv), int(rv)):
                     return lv * rv
                 case _:
                     raise EvalError("multiplication of non-integers")
         case Lt(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case(int(lv), int(rv)):
                     if(lv < rv):
                         return True
@@ -215,7 +215,7 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                 case _:
                     raise EvalError("Less than comparison of non-integers")
         case And(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case((bool(lv), bool(rv))):
                     if(lv and rv):
                         return True
@@ -225,7 +225,7 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                     raise EvalError("One of the operands is not a bool!")
         
         case Or(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case((bool(lv), bool(rv))):
                     if(lv or rv):
                         return True
@@ -235,9 +235,9 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                     raise EvalError("One of the operands is not a bool!")
 
         case Not(s):
-            return Not(evalInEnv(env,s))
+            return Not(eval(env,s))
         case Eq(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case((bool(lv), bool(rv))):
                     if lv == rv:
                         return True
@@ -258,7 +258,7 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
 
 
         case Div(l,r):
-            match (evalInEnv(env,l), evalInEnv(env,r)):
+            match (eval(env,l), eval(env,r)):
                 case (int(lv), int(rv)):
                     if rv == 0:
                         raise EvalError("division by zero")
@@ -266,18 +266,18 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                 case _:
                     raise EvalError("division of non-integers")
         case If(b,t,e):
-            match(evalInEnv(env,b)):
+            match(eval(env,b)):
                 case bool(bv):
                     if bv:
-                        return evalInEnv(env,t)
+                        return eval(env,t)
                     elif (bv == False):
-                        return evalInEnv(env,e)
+                        return eval(env,e)
                 case _:
                     raise EvalError("First operand in If statement is not a bool!")
         
 
         case Neg(s):
-            match evalInEnv(env,s):
+            match eval(env,s):
                 case int(i):
                     return -i
                 case _:
@@ -298,9 +298,9 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
                 raise EvalError(f"unbound name {n}")
             return v
         case Let(n,d,b):
-            v = evalInEnv(env, d)
+            v = eval(env, d)
             newEnv = extendEnv(n, v, env)
-            return evalInEnv(newEnv, b)
+            return eval(newEnv, b)
         case Command(line,flags,arguments):
             final_str = line
             
@@ -314,15 +314,15 @@ def evalInEnv(env: Env[Value], e:Expr) -> Value:
             
             return final_str
         case Pipe(lc,rc):
-            return str(evalInEnv(env, lc)) + ' | ' + str(evalInEnv(env,rc))
+            return str(eval(env, lc)) + ' | ' + str(eval(env,rc))
         case Redirect(lc,rc):
-            return str(evalInEnv(env,lc)) + ' > ' + str(evalInEnv(env,rc))
+            return str(eval(env,lc)) + ' > ' + str(eval(env,rc))
         case Append(lc,rc):
-            return str(evalInEnv(env,lc)) + ' >> ' + str(evalInEnv(env,rc))
+            return str(eval(env,lc)) + ' >> ' + str(eval(env,rc))
         case Bg(c):
-            return str(evalInEnv(env,c)) + ' &'
+            return str(eval(env,c)) + ' &'
         case Sequence(lc,rc):
-            return str(evalInEnv(env,lc)) + ' ; ' + str(evalInEnv(env,rc))
+            return str(eval(env,lc)) + ' ; ' + str(eval(env,rc))
     
 def execute_command(cmd : str) -> str:
     try:
@@ -351,6 +351,6 @@ def execute_command(cmd: str) -> str:
 # Print the AST representation
 print(pipe_command)
 print(a)
-test_string = evalInEnv(emptyEnv, pipe_command)
+test_string = eval(emptyEnv, pipe_command)
 execute_command(test_string)
-print(evalInEnv(emptyEnv, a))
+print(eval(emptyEnv, a))
