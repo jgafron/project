@@ -483,6 +483,7 @@ def run(e: Expr) -> None:
     print(f"Running: {e}")
     try:
         result = eval(e)
+        print(result)
         
         if "Command" in str(e):
             command_output = execute_command(result)
@@ -498,21 +499,53 @@ def run(e: Expr) -> None:
 
 
 #PROOF OF CONCEPT TESTS
-a = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
-b = RedirectIn(Pipe(Command('curl', ['-O', 'https://example.com/file']), Command('grep', ['"keyword"'])), Filename('input.txt'))
-c = RedirectOut(Command('cat', ['file1.txt']), Filename('output.log'))
-d = Bg(Pipe(Command('ps', ['-aux']), Command('grep', ['python'])))
-e = Sequence(Command('echo', ['Hello']), Command('grep', ['Hello']))
-f = RedirectErrorOut(Command('ls', ['nonexistent_directory']), Filename('error.log'))
-g = Bg(RedirectOut(RedirectErrorOut(Pipe(Command('cat', ['file1.txt']),Pipe(Command('grep', ['pattern']),Command('sort', []))),Filename('stderr_log.txt')),Filename('stdout_log.txt')))
+command_stra = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
+command_strb = RedirectOut(Command('cat', ['file1.txt']), Filename('output.log'))
+command_strc = Bg(Pipe(Command('ps', ['-aux']), Command('grep', ['python'])))
+command_strd = Sequence(Command('echo', ['Hello', '>', 'file.txt']),Command('ps', ['-aux']))
+command_stre = RedirectErrorOut(Command('ls', ['nonexistent_directory']), Filename('error.log'))
+command_strf = RedirectOut(Pipe(Command('ps', ['-aux']),Command('grep', ['jgafron'])),Filename('jgafron.txt')),RedirectErrorOut(Command('ls', ['-l']),Filename('stderr_log.txt'))
+
 
 
 pure_a = And(Or(Eq(Lit(-37), Lit(-37)), Lit(False)), Lt(Lit(-75), Lit(43)))
-command_strb = eval(b)
-command_strc = eval(c)
-command_strd = eval(d)
-command_stre = eval(e)
-command_strf = eval(f)
-command_strg = eval(g)
-run(a)
-#run(pure_a)
+pure_b = If(Lt(Add(Lit(30), Lit(-33)), Lit(31)),
+                  And(Lit(True), Lit(False)),
+                  Lit(True))
+pure_c = If(Lit(True), If(Lit(False), Lit(-98), Lit(26)), Lit(-20))
+pure_d = Eq(Lit(False), Lit(False))
+pure_e = Let('x',
+                   Lit(1),
+                   Let('y',
+                       Lit(2),
+                       Sub(Name('y'),
+                           Name('x')
+                           )
+                       )
+                   )
+
+run(command_stra)
+run(command_strb)
+run(command_strc)
+run(command_strd)
+run(command_stre)
+run(command_strf)
+run(pure_a)
+run(pure_b)
+run(pure_c)
+run(pure_d)
+run(pure_e)
+#END OF PROOF OF CONCEPT TESTS
+
+
+'''
+This Shell DSL part of the interpreter uses an Abstract Syntax Tree (AST) to represent shell commands and operations. 
+Each shell command is broken down into distinct components—like the program name, flags, and arguments—captured as 
+different data structures. Operations like piping (|), output redirection (>), and background execution (&) are also 
+represented as specific AST nodes.
+
+The interpreters eval function recursively evaluates these AST nodes. For commands, it constructs the corresponding 
+shell command and executes it using Python subprocess module. Operations like redirection or piping are translated 
+into system commands, and the output is handled accordingly. This structure allows the interpreter to execute complex 
+shell command sequences while maintaining clarity and modularity in the evaluation process.
+'''
