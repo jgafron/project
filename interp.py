@@ -464,6 +464,7 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             else:
                 return str(lcp + ' ; ' + rcp)
 
+#HELPER FUNCTION TO EXECUTE COMMANDS
 def execute_command(cmd: str) -> str:
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
@@ -477,7 +478,41 @@ def execute_command(cmd: str) -> str:
     except Exception as e:
         return f"An unexpected error occurred: {str(e)}"
 
-a = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
-command_stra = eval(a)
-print((command_stra))
+#RUN FUNCTION LIKE TURTLE FOR REQUIREMENT
+def run(e: Expr) -> None:
+    print(f"Running: {e}")
+    try:
+        result = eval(e)
+        
+        if "Command" in str(e):
+            command_output = execute_command(result)
+            print(f"Command output: {command_output}")
+        
+        
+        else:
+            print(f"Evaluated expression: {e}")
+            print(f"Result = {result}")
+    
+    except EvalError as err:
+        print(f"Evaluation error: {err}")
 
+
+#PROOF OF CONCEPT TESTS
+a = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
+b = RedirectIn(Pipe(Command('curl', ['-O', 'https://example.com/file']), Command('grep', ['"keyword"'])), Filename('input.txt'))
+c = RedirectOut(Command('cat', ['file1.txt']), Filename('output.log'))
+d = Bg(Pipe(Command('ps', ['-aux']), Command('grep', ['python'])))
+e = Sequence(Command('echo', ['Hello']), Command('grep', ['Hello']))
+f = RedirectErrorOut(Command('ls', ['nonexistent_directory']), Filename('error.log'))
+g = Bg(RedirectOut(RedirectErrorOut(Pipe(Command('cat', ['file1.txt']),Pipe(Command('grep', ['pattern']),Command('sort', []))),Filename('stderr_log.txt')),Filename('stdout_log.txt')))
+
+
+pure_a = And(Or(Eq(Lit(-37), Lit(-37)), Lit(False)), Lt(Lit(-75), Lit(43)))
+command_strb = eval(b)
+command_strc = eval(c)
+command_strd = eval(d)
+command_stre = eval(e)
+command_strf = eval(f)
+command_strg = eval(g)
+run(a)
+#run(pure_a)
