@@ -303,7 +303,7 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                         return True
                     else:
                         return False
-                case((Command(lv), Command(rv))):
+                case((str(lv), str(rv))):
                     if lv == rv:
                         return ("The strings are equal!")
                     else:
@@ -372,32 +372,31 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                 for argument in arguments:
                     final_str += " " + argument
             
-            return final_str
+            return str(final_str)
         
         case Filename(s):
             return str('"' + s + '"')
         
-        case Pipe(lc,rc):
-            lcp = eval(lc,env)
-            rcp = eval(rc,env)
+        case Pipe(lc, rc):
+            lcp = eval(lc, env)
+            rcp = eval(rc, env)
 
-            if(type(lcp) != Command):
-               raise EvalError("Left command isnt a command!")
+            if not isinstance(lcp, str):
+                raise EvalError("Left side is not a valid command string!")
             
-            elif(type(rcp) != Command):
-               raise EvalError("Right command isnt a command!")
+            if not isinstance(rcp, str):
+                raise EvalError("Right side is not a valid command string!")
             
-            else:
-                return str(lcp + ' | ' + rcp)
+            return f"{lcp} | {rcp}"
             
         case RedirectOut(lc,rc):
             lcp = eval(lc,env)
             rcp = eval(rc,env)
 
-            if(type(lcp) != Command):
+            if(type(lcp) != str):
                raise EvalError("Left command isnt a command!")
             
-            elif(type(rcp) != Filename):
+            elif(type(rcp) != str):
                raise EvalError("Right side of redirect stdout isnt a filename!")
             
             else:
@@ -407,10 +406,10 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             lcp = eval(lc,env)
             rcp = eval(rc,env)
 
-            if(type(lcp) != Command):
+            if(type(lcp) != str):
                raise EvalError("Left command isnt a command!")
             
-            elif(type(rcp) != Filename):
+            elif(type(rcp) != str):
                raise EvalError("Right side of redirect stdin isnt a filename!")
             
             else:
@@ -420,10 +419,10 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             lcp = eval(lc,env)
             rcp = eval(rc,env)
 
-            if(type(lcp) != Command):
+            if(type(lcp) != str):
                raise EvalError("Left command isnt a command!")
             
-            elif(type(rcp) != Filename):
+            elif(type(rcp) != str):
                raise EvalError("Right side of redirect stderr isnt a filename!")
             
             else:
@@ -434,10 +433,10 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             lcp = eval(lc,env)
             rcp = eval(rc,env)
 
-            if(type(lcp) != Command):
+            if(type(lcp) != str):
                raise EvalError("Left command isnt a command!")
             
-            elif(type(rcp) != Filename):
+            elif(type(rcp) != str):
                raise EvalError("Right side of append isnt a filename!")
             
             else:
@@ -446,7 +445,7 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
         case Bg(c):
             cp = eval(c,env)
 
-            if(type(cp) != Command):
+            if(type(cp) != str):
                raise EvalError("Left command isnt a command!")
             
             else:
@@ -456,10 +455,10 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             lcp = eval(lc,env)
             rcp = eval(rc,env)
 
-            if(type(lcp) != Command):
+            if(type(lcp) != str):
                raise EvalError("Left command isnt a command!")
             
-            elif(type(rcp) != Command):
+            elif(type(rcp) != str):
                raise EvalError("Right side of sequence isnt a command!")
             
             else:
@@ -478,9 +477,7 @@ def execute_command(cmd: str) -> str:
     except Exception as e:
         return f"An unexpected error occurred: {str(e)}"
 
-a = RedirectOut(Pipe(Command('ls', ['-l']), Command('grep', ['txt'])), Filename('testoutput.txt'))
-b = Command('ls', ['-l'])
+a = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
 command_stra = eval(a)
-command_strb = eval(b)
-execute_command(command_stra)
-execute_command(command_strb)
+print((command_stra))
+
