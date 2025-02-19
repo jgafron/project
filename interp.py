@@ -96,7 +96,7 @@ class Name():
     name: str
     def __str__(self) -> str:
         return self.name
-    
+
 @dataclass
 class Let():
     name: str
@@ -126,6 +126,22 @@ class If():
     elseBranch: Expr
     def __str__(self) -> str:
         return f"If {self.condition} then {self.thenBranch} else {self.elseBranch}"
+
+@dataclass
+class Letfun():
+    name: str
+    param: Name  # param is now a Name Expr
+    bodyexpr: Expr
+    inexpr: Expr
+    def __str__(self) -> str:
+        return f"letfun {self.name} ({self.param}) = {self.bodyexpr} in {self.inexpr} end"
+
+@dataclass
+class App():
+    fun: Expr
+    arg: Expr
+    def __str__(self) -> str:
+        return f"({self.fun} ({self.arg}))"
     
 @dataclass
 class Pipe():
@@ -203,7 +219,13 @@ def lookupEnv[V](name: str, env: Env[V]) -> (V | None) :
 class EvalError(Exception):
     pass
 
-type Value = int | bool | Command
+type Value = int | bool | Command | Closure
+
+@dataclass
+class Closure:
+    param: str
+    body: Expr
+    env: Env[Value]
 
 def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
     match e:
@@ -334,7 +356,7 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                         return eval(e, env)
                 case _:
                     raise EvalError("First operand in If statement is not a bool!")
-
+                
         case Neg(s):
             val = eval(s, env)
             if (type(val)) is not int:
@@ -463,6 +485,20 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             
             else:
                 return str(lcp + ' ; ' + rcp)
+            
+        case App(f, a):
+            fun = eval(f, env)
+            arg = eval(a, env)
+            match fun:
+                case Closure(p, b, cenv):
+                    newEnv = cenv  # Start with the closure's environment
+                    newEnv = extendEnv(p, arg, newEnv)  # Create a *new* environment
+                    return eval(b, newEnv)  # Evaluate in the *new* environment
+
+        case Letfun(n, p, b, i):
+            closure = Closure(p.name, b, env)  # Store param correctly
+            newEnv = extendEnv(n, closure, env)
+            return eval(i, newEnv)
 
 #HELPER FUNCTION TO EXECUTE COMMANDS
 def execute_command(cmd: str) -> str:
@@ -497,7 +533,7 @@ def run(e: Expr) -> None:
     except EvalError as err:
         print(f"Evaluation error: {err}")
 
-
+'''
 #PROOF OF CONCEPT TESTS
 command_stra = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
 command_strb = RedirectOut(Command('cat', ['file1.txt']), Filename('output.log'))
@@ -537,7 +573,7 @@ run(pure_d)
 run(pure_e)
 #END OF PROOF OF CONCEPT TESTS
 
-
+'''
 '''
 This Shell DSL part of the interpreter uses an Abstract Syntax Tree (AST) to represent shell commands and operations. 
 Each shell command is broken down into distinct components—like the program name, flags, and arguments—captured as 

@@ -1,0 +1,41 @@
+%import common.INT -> INT
+%import common.CNAME -> ID
+%import common.WS
+
+%ignore WS # ignore whitespace
+
+?expr: "if" expr "then" expr "else" expr -> if_exp
+    | or_expr
+
+?or_expr: or_expr "||" and_expr -> or_exp
+    | and_expr
+
+?and_expr: and_expr "&&" not_expr -> and_exp
+    | not_expr
+
+?not_expr: "!" not_expr -> not_exp
+    | expr_bool
+
+?expr_bool: expr1 comparison expr1 -> comparison_expr
+    | expr1
+
+?expr1: expr1 "+" term -> plus
+    | expr1 "-" term -> minus
+    | term
+
+?term: term "*" factor -> times
+    | term "/" factor -> divide
+    | factor
+
+?factor: "-" factor -> neg
+    | atom
+
+?atom: ID -> id
+    | INT -> int
+    | ID "(" expr ")" -> app  # Single argument application
+    | "(" expr ")"
+    | "let" ID "=" expr "in" expr "end" -> let
+    | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun  # Single parameter letfun
+
+?comparison: "==" -> equalop
+    | "<" -> lessthan
