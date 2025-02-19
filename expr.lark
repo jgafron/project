@@ -1,10 +1,15 @@
 %import common.INT -> INT
 %import common.CNAME -> ID
+%import common.ESCAPED_STRING -> STRING
 %import common.WS
 
-%ignore WS # ignore whitespace
+%ignore WS  # Ignore whitespace
 
-?expr: "if" expr "then" expr "else" expr -> if_exp
+FILENAME: /[a-zA-Z_][a-zA-Z0-9_.-]*/ 
+COM: "COM"  # Explicit marker for shell commands
+
+?expr: command  # Allow shell commands as expressions
+    | "if" expr "then" expr "else" expr -> if_exp
     | or_expr
 
 ?or_expr: or_expr "||" and_expr -> or_exp
@@ -27,15 +32,42 @@
     | term "/" factor -> divide
     | factor
 
-?factor: "-" factor -> neg
+?factor: "-" factor -> neg  # Only negates numbers, avoids treating "-l" as subtraction
     | atom
 
 ?atom: ID -> id
     | INT -> int
-    | ID "(" expr ")" -> app  # Single argument application
+    | STRING -> string
+    | atom "(" expr ")" -> app  # Function application
     | "(" expr ")"
     | "let" ID "=" expr "in" expr "end" -> let
-    | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun  # Single parameter letfun
+    | "letfun" ID "(" ID ")" "=" expr "in" expr "end" -> letfun
 
 ?comparison: "==" -> equalop
     | "<" -> lessthan
+
+# --------------------------
+# SHELL COMMANDS (Using COM Flag)
+# --------------------------
+?command: pipeline
+
+?pipeline: pipeline "|" redirection -> pipe
+         | redirection
+
+?redirection: command_base ">" ID -> redirect_out
+            | command_base "<" ID -> redirect_in
+            | command_base "2>" ID -> redirect_err_out
+            | command_base "2<" ID -> redirect_err_in
+            | command_base
+
+?command_base: COM ID args? bg?  # Require COM before command
+
+?arg: FILENAME
+    | STRING
+    | INT
+    | "-" ID -> flag  # Explicitly differentiate flags from subtraction
+
+?args: arg+
+
+
+?bg: "&" -> background

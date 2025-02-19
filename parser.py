@@ -1,9 +1,9 @@
-from interp import Add, Sub, Mul, Div, Neg, Let, Lit, And, Or, Not, Name, Eq, Lt, If, Pipe, RedirectOut, RedirectIn, RedirectErrorOut,RedirectErrorIn, Bg, Letfun, App, Expr, run
+from interp import Add, Sub, Mul, Div, Neg, Let, Lit, And, Or, Not, Name, Eq, Lt, If, Pipe, RedirectOut, RedirectIn, Command, Filename, RedirectErrorOut,RedirectErrorIn, Bg, Letfun, App, Expr, run
 from lark import Lark, Token, ParseTree, Transformer, Tree
 from lark.exceptions import VisitError
 from pathlib import Path
 
-parser = Lark(Path('expr.lark').read_text(),start='expr', parser='earley', ambiguity='explicit') #import lark grammar
+parser = Lark(Path('expr.lark').read_text(),start='expr', parser='lalr', strict=True) #import lark grammar
 class ParseError(Exception): #raise some error 
     pass
 
@@ -18,6 +18,43 @@ class AmbiguousParse(Exception): #raise error if expr is ambigous
 
 class ToExpr(Transformer[Token,Expr]): #Class ToExpr that is a subclass of Transformer which will transform tokens into expressions
     '''Defines a transformation from5 a parse tree into an AST'''
+    def flag(self, args):
+        return "-" + args[0].value  # Convert flag token to string
+    def command_base(self, args):
+        program = args[1].value  # Extract command name (skip COM)
+        flags = []
+        arguments = []
+
+        for arg in args[2:]:  # Process flags and arguments
+
+            # Handle flags correctly even if they arrive as strings
+            if isinstance(arg, str) and arg.startswith("-"):
+                flags.append(arg)
+
+            elif isinstance(arg, Tree) and arg.data == "flag":
+                flag_value = "-" + arg.children[0].value  # Convert 'l' → '-l'
+                flags.append(flag_value)
+
+            elif isinstance(arg, Token):
+                if arg.type == "ID":
+                    arguments.append(arg.value)
+                elif arg.type == "STRING":  
+                    arguments.append(arg.value)  # Keep the quotes
+
+        return Command(program, flags=flags, arguments=arguments)
+    def pipe(self, args):
+        left, right = args
+        return Pipe(left, right)
+    def redirect_out(self, args):
+        return RedirectOut(args[0], Filename(args[1].value))
+    def redirect_in(self, args):
+        return RedirectIn(args[0], Filename(args[1].value))
+    def redirect_err_out(self, args):
+        return RedirectErrorOut(args[0], Filename(args[1].value))
+    def redirect_err_in(self, args):
+        return RedirectErrorIn(args[0], Filename(args[1].value))
+    def background(self, args):
+        return Bg(args[0])
     def true(self, args: tuple) -> Expr:
         return Lit(True)  # Represent 'true' as a boolean literal True
     def false(self, args: tuple) -> Expr:
@@ -81,34 +118,58 @@ class ToExpr(Transformer[Token,Expr]): #Class ToExpr that is a subclass of Trans
         raise AmbiguousParse()
 
 
-def genAST(t:ParseTree) -> Expr:
-    '''Applies the transformer to convert a parse tree into an AST'''
-    # boilerplate to catch potential ambiguity error raised by transformer
+def parse_and_run(s: str):
+    """Parses the input string, converts it into an AST, and executes it."""
     try:
-        return ToExpr().transform(t)               
+        parse_tree = parser.parse(s)
+        ast = ToExpr().transform(parse_tree)
+        run(ast)
     except VisitError as e:
-        if isinstance(e.orig_exc,AmbiguousParse):
+        if isinstance(e.orig_exc, AmbiguousParse):
             raise AmbiguousParse()
         else:
             raise e
+    except Exception as e:
+        raise ParseError(e)
 
-def driver():
-    while True:
-        try:
-            s = input('expr: ')
-            t = parse(s)
-            print("raw:", t)    
-            print("pretty:")
-            print(t.pretty())
-            ast = genAST(t)
-            print("raw AST:", repr(ast))  # use repr() to avoid str() pretty-printing
-            run(ast)                      # pretty-prints and executes the AST
-        except AmbiguousParse:
-            print("ambiguous parse")                
-        except ParseError as e:
-            print("parse error:")
-            print(e)
-        except EOFError:
-            break
+test_arith1 = "1 + 2 * 3"  # Multiplication has higher precedence than addition → should evaluate to 1 + (2 * 3) = 7
+test_arith2 = "(1 + 2) * 3"  # Parentheses override precedence → should evaluate to (1 + 2) * 3 = 9
+test_arith3 = "-(5 + 3) * 2"  # Unary negation with parentheses → should evaluate to -8 * 2 = -16
+test_arith4 = "let x = 10 in x * 2 + 5 end"  # `let-in-end` precedence → (x * 2) + 5 = 25
+test_arith5 = "let x = 4 in let y = 2 in x / y + 3 end end"  # Nested let bindings → should evaluate to (4 / 2) + 3 = 5
+test_arith6 = "letfun square(x) = x * x in square(3) + square(4) end"  
+# Function application with precedence → should evaluate to (3*3) + (4*4) = 9 + 16 = 25
+test_bool1 = "let x = 5 in x < 10 && x == 5 end"  
+#  `x < 10` is `true`, `x == 5` is `true` → `true && true` → `true`
+test_bool2 = "let a = 2 in let b = 4 in !(a == b) || a < b end end"  
+#  `a == b` is `false`, `!(a == b)` is `true`, `a < b` is `true` → `true || true` → `true`
+test_bool3 = "letfun isEven(n) = n == 0 || !(n == 1) in isEven(2) && isEven(3) end"  
+#  `isEven(2)` → `2 == 0 || !(2 == 1)` → `false || true` → `true`
+#  `isEven(3)` → `3 == 0 || !(3 == 1)` → `false || true` → `true`
+#  `true && true` → `true`
+test_bool_simple1 = "true && false"  
+#  `true && false` → `false`
+test_bool_simple2 = "!false || false"  
+#  `!false` → `true`, `true || false` → `true`
+test_bool_simple3 = "1 == 1 && 2 < 3"  
+#  `1 == 1` → `true`, `2 < 3` → `true`
+#  `true && true
 
-driver()
+test_dsl1 = "COM ls -la"
+test_dsl2 = "COM echo 'Hello, world!'"
+test_dsl3 = "COM grep 'error'"
+test_dsl4 = "COM ls -la | grep"
+
+parse_and_run(test_arith1)
+parse_and_run(test_arith2)
+parse_and_run(test_arith3)
+parse_and_run(test_arith4)
+parse_and_run(test_arith5)
+parse_and_run(test_arith6)
+parse_and_run(test_bool1)
+parse_and_run(test_bool2)
+parse_and_run(test_bool3)
+parse_and_run(test_bool_simple1)
+parse_and_run(test_bool_simple2)
+parse_and_run(test_bool_simple3)
+parse_and_run(test_dsl4)

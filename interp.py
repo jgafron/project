@@ -285,22 +285,17 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                 return lv and rv
             else:
                 raise EvalError("Right operand is not a bool!")
-        
         case Or(l, r):
             lv = eval(l, env)
             if isinstance(lv, bool) and lv:
                 return True
-            
             if (type(lv) != bool):
                 raise EvalError("LHS isnt bool!")
-            
             rv = eval(r, env)
-    
             if isinstance(rv, bool):
                 return lv or rv
             else:
                 raise EvalError("One of the operands is not a bool!")
-
         case Not(s):
             val = eval(s, env)
             if isinstance(val, bool):
@@ -310,10 +305,8 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
         case Eq(l,r):
             lv = eval(l, env)
             rv = eval(r, env)
-
             if (type(rv) != type(lv)):
                 return False
-                
             match (eval(l, env), eval(r, env)):
                 case((bool(lv), bool(rv))):
                     if lv == rv:
@@ -332,8 +325,6 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
                         return ("The strings are not the same!")
                 case _:
                     raise EvalError("Type is not bool, nor int, nor command!")
-
-
         case Div(l,r):
             lv = eval(l,env)
             rv = eval(r,env)
@@ -383,74 +374,49 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             v = eval(d, env)
             newEnv = extendEnv(n, v, env)
             return eval(b, newEnv)
-        case Command(line,flags,arguments):
-            final_str = line
-            
-            if flags:
-                for flag in flags:
-                    final_str += " " + flag
+        case Command(program, flags, arguments):
+            cmd = [program] + (flags if flags else []) + (arguments if arguments else [])
 
-            if arguments:
-                for argument in arguments:
-                    final_str += " " + argument
-            
-            return str(final_str)
-        
+            # 🛠 Debugging print statements
+            print(f"DEBUG: Running command: {cmd}")
+
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                return result.stdout.strip()
+            except subprocess.CalledProcessError as e:
+                print(f"DEBUG: Command failed: {e.stderr}")
+                return f"Command failed: {e.stderr}"
         case Filename(s):
             return str('"' + s + '"')
-        
-        case Pipe(lc, rc):
-            lcp = eval(lc, env)
-            rcp = eval(rc, env)
+        case Pipe(left, right):
+            left_output = eval(left, env)
+            if not isinstance(left_output, str):
+                raise EvalError("Pipe left side must produce a string")
+            
+            right_cmd = eval(right, env) 
 
-            if not isinstance(lcp, str):
-                raise EvalError("Left side is not a valid command string!")
+            process = subprocess.run(right_cmd, input=left_output, text=True, capture_output=True, shell=True)
+            return process.stdout.strip()
+        case RedirectOut(command, filename):
+            output = eval(command, env)
+            with open(filename.name, "w") as f:
+                f.write(output)
+            return f"Output written to {filename.name}"
+        case RedirectIn(command, filename):
+            with open(filename.name, "r") as f:
+                input_data = f.read()
+            return eval(command, extendEnv("STDIN", input_data, env))
+        case RedirectErrorOut(command, filename):
+            cmd = eval(command, env)
+            if not isinstance(cmd, str):
+                raise EvalError("Command must be a string")
             
-            if not isinstance(rcp, str):
-                raise EvalError("Right side is not a valid command string!")
-            
-            return f"{lcp} | {rcp}"
-            
-        case RedirectOut(lc,rc):
-            lcp = eval(lc,env)
-            rcp = eval(rc,env)
-
-            if(type(lcp) != str):
-               raise EvalError("Left command isnt a command!")
-            
-            elif(type(rcp) != str):
-               raise EvalError("Right side of redirect stdout isnt a filename!")
-            
-            else:
-                return str(lcp + ' > ' + rcp)
-            
-        case RedirectIn(lc,rc):
-            lcp = eval(lc,env)
-            rcp = eval(rc,env)
-
-            if(type(lcp) != str):
-               raise EvalError("Left command isnt a command!")
-            
-            elif(type(rcp) != str):
-               raise EvalError("Right side of redirect stdin isnt a filename!")
-            
-            else:
-                return str(lcp + ' < ' + rcp)
-            
-        case RedirectErrorOut(lc,rc):
-            lcp = eval(lc,env)
-            rcp = eval(rc,env)
-
-            if(type(lcp) != str):
-               raise EvalError("Left command isnt a command!")
-            
-            elif(type(rcp) != str):
-               raise EvalError("Right side of redirect stderr isnt a filename!")
-            
-            else:
-                return str(lcp + ' 2> ' + rcp)
-            
-            
+            try:
+                with open(filename.name, "w") as f:
+                    subprocess.run(cmd, shell=True, stderr=f)
+                return f"Error output written to {filename.name}"
+            except Exception as e:
+                raise EvalError(f"Failed to redirect stderr: {str(e)}")
         case Append(lc,rc):
             lcp = eval(lc,env)
             rcp = eval(rc,env)
@@ -463,16 +429,13 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             
             else:
                 return str(lcp + ' >> ' + rcp)
+        case Bg(command):
+            cmd = eval(command, env)
+            if not isinstance(cmd, str):
+                raise EvalError("Command must be a string")
             
-        case Bg(c):
-            cp = eval(c,env)
-
-            if(type(cp) != str):
-               raise EvalError("Left command isnt a command!")
-            
-            else:
-                return str(cp + ' & ')
-        
+            subprocess.Popen(cmd, shell=True)
+            return f"Running in background: {cmd}"
         case Sequence(lc,rc):
             lcp = eval(lc,env)
             rcp = eval(rc,env)
@@ -485,7 +448,6 @@ def eval(e: Expr, env: Env[Value] = emptyEnv) -> Value:
             
             else:
                 return str(lcp + ' ; ' + rcp)
-            
         case App(f, a):
             fun = eval(f, env)
             arg = eval(a, env)
@@ -519,20 +481,9 @@ def run(e: Expr) -> None:
     print(f"Running: {e}")
     try:
         result = eval(e)
-        print(result)
-        
-        if "Command" in str(e):
-            command_output = execute_command(result)
-            print(f"Command output: {command_output}")
-        
-        
-        else:
-            print(f"Evaluated expression: {e}")
-            print(f"Result = {result}")
-    
+        print(f"Result = {result}")
     except EvalError as err:
         print(f"Evaluation error: {err}")
-
 '''
 #PROOF OF CONCEPT TESTS
 command_stra = RedirectOut(Pipe(Command('ls', ['-l']), Command("grep", ["jgafron"])), Filename("output.txt"))
